@@ -15,11 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-venv \
-    python3.12-distutils \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3.12 -m ensurepip \
-    && python3.12 -m pip install --upgrade pip setuptools wheel
+RUN python3.12 -m pip install --upgrade pip setuptools wheel
 
 ARG TORCH_VERSION=2.7.0
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126
