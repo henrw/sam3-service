@@ -1,0 +1,55 @@
+substitutions:
+  _REGION: us-central1
+  _AR_REPO: sam3
+  _IMAGE: sam3-api
+  _TAG: latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "-t"
+      - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image"
+      - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region"
+      - "$_DEPLOY_REGION"
+      - "--platform"
+      - "$_PLATFORM"
+      # ---- Cloud Run GPU settings ----
+      - "--gpu"
+      - "1"
+      - "--gpu-type"
+      - "nvidia-l4"
+      # GPU services use always-allocated CPU (instance-based billing)
+      - "--no-cpu-throttling"
+      # Sane starting resources for SAM inference
+      - "--cpu"
+      - "8"
+      - "--memory"
+      - "32Gi"
+      # Keep it predictable (one request at a time per GPU)
+      - "--concurrency"
+      - "1"
+      - "--max-instances"
+      - "1"
+      # Optional: make it public; remove if you want auth
+      - "--allow-unauthenticated"
+
+timeout: 1200s
+
+images:
+  - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
