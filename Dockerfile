@@ -11,12 +11,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     gnupg \
     git \
+    curl \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-venv \
-    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install pip for Python 3.12 from upstream (avoids distutils issues)
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+    && python3.12 /tmp/get-pip.py \
+    && rm -f /tmp/get-pip.py \
+    && python3.12 -m pip install --upgrade pip setuptools wheel
 
 RUN python3.12 -m pip install --upgrade pip setuptools wheel
 
