@@ -1,9 +1,3 @@
-substitutions:
-  _REGION: us-central1
-  _AR_REPO: sam3
-  _IMAGE: sam3-api
-  _TAG: latest
-
 steps:
   - name: gcr.io/cloud-builders/docker
     args:
@@ -53,3 +47,6 @@ timeout: 1200s
 
 images:
   - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
