@@ -28,6 +28,8 @@ steps:
       - "1"
       - "--gpu-type"
       - "nvidia-l4"
+      # Avoid interactive prompt / quota for GPU zonal redundancy
+      - "--no-zonal-redundancy"
       # GPU services use always-allocated CPU (instance-based billing)
       - "--no-cpu-throttling"
       # Sane starting resources for SAM inference
