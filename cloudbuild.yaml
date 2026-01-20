@@ -3,52 +3,63 @@ steps:
     args:
       - build
       - "-t"
-      - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
-      - .
+      - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
+      - "."
 
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - "$_SERVICE_NAME"
+      - "${_SERVICE_NAME}"
       - "--image"
-      - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
       - "--region"
-      - "$_DEPLOY_REGION"
+      - "${_DEPLOY_REGION}"
       - "--platform"
-      - "$_PLATFORM"
-      # ---- Cloud Run GPU settings ----
+      - "managed"
+      - "--quiet"
+
+      # ---- GPU ----
       - "--gpu"
       - "1"
       - "--gpu-type"
       - "nvidia-l4"
-      # Avoid interactive prompt / quota for GPU zonal redundancy
-      - "--no-zonal-redundancy"
-      # GPU services use always-allocated CPU (instance-based billing)
-      - "--no-cpu-throttling"
-      # Sane starting resources for SAM inference
+      - "--no-gpu-zonal-redundancy"
+
+      # ---- Resources ----
       - "--cpu"
       - "8"
       - "--memory"
       - "32Gi"
-      # Keep it predictable (one request at a time per GPU)
+      - "--no-cpu-throttling"
       - "--concurrency"
       - "1"
+
+      # ---- Scaling ----
+      - "--min-instances"
+      - "0"
       - "--max-instances"
       - "1"
-      # Optional: make it public; remove if you want auth
+
+      # ---- Access ----
       - "--allow-unauthenticated"
 
 timeout: 1200s
 
 images:
-  - "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
 
 options:
   logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _DEPLOY_REGION: "us-central1"
+  _SERVICE_NAME: "sam3"
+  _AR_REPO: "YOUR_AR_REPO"         # e.g. "containers"
+  _AR_HOSTNAME: "us-central1-docker.pkg.dev"
