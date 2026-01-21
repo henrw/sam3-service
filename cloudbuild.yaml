@@ -11,6 +11,23 @@ steps:
       - push
       - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
 
+  # 1) Pre-set service scaling bounds (fixes existing maxScale=100)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - "${_SERVICE_NAME}"
+      - "--region"
+      - "${_DEPLOY_REGION}"
+      - "--platform"
+      - "managed"
+      - "--max-instances=1"
+      - "--min-instances=0"
+      - "--quiet"
+
+  # 2) Deploy revision with GPU + no GPU zonal redundancy + force maxScale=1
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -26,26 +43,21 @@ steps:
       - "--quiet"
 
       # ---- GPU ----
-      - "--gpu"
-      - "1"
-      - "--gpu-type"
-      - "nvidia-l4"
+      - "--gpu=1"
+      - "--gpu-type=nvidia-l4"
       - "--no-gpu-zonal-redundancy"
 
       # ---- Resources ----
-      - "--cpu"
-      - "8"
-      - "--memory"
-      - "32Gi"
+      - "--cpu=8"
+      - "--memory=32Gi"
       - "--no-cpu-throttling"
-      - "--concurrency"
-      - "1"
+      - "--concurrency=1"
 
-      # ---- Scaling ----
-      - "--min-instances"
-      - "0"
-      - "--max-instances"
-      - "1"
+      # ---- Scaling (force) ----
+      - "--max-instances=1"
+      - "--min-instances=0"
+      # Force the underlying revision annotation explicitly:
+      - "--update-annotations=autoscaling.knative.dev/maxScale=1,autoscaling.knative.dev/minScale=0"
 
       # ---- Access ----
       - "--allow-unauthenticated"
@@ -57,9 +69,3 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-substitutions:
-  _DEPLOY_REGION: "us-central1"
-  _SERVICE_NAME: "sam3"
-  _AR_REPO: "YOUR_AR_REPO"         # e.g. "containers"
-  _AR_HOSTNAME: "us-central1-docker.pkg.dev"
