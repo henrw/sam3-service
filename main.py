@@ -101,6 +101,9 @@ def _run_segmentation(img_bytes: bytes, prompt: str) -> dict:
         "mask_shape": list(masks.shape),
     }
 
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 @app.post("/segment/text")
 async def segment_text(image: UploadFile = File(...), prompt: str = Form(...)):
