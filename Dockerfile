@@ -41,7 +41,8 @@ RUN python3.12 -m pip install \
     uvicorn[standard] \
     pillow \
     python-multipart \
-    einops
+    einops \
+ && python3.12 -c "import einops; print('einops OK', einops.__version__)"
 
 RUN useradd -m -u 10001 appuser \
     && mkdir -p /app /tmp/huggingface \

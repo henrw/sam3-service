@@ -2,6 +2,7 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - build
+      - "--no-cache"
       - "-t"
       - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
       - "."
