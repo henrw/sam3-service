@@ -12,23 +12,7 @@ steps:
       - push
       - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
 
-  # 1) Pre-set service scaling bounds (fixes existing maxScale=100)
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
-    args:
-      - run
-      - services
-      - update
-      - "${_SERVICE_NAME}"
-      - "--region"
-      - "${_DEPLOY_REGION}"
-      - "--platform"
-      - "managed"
-      - "--max-instances=1"
-      - "--min-instances=0"
-      - "--quiet"
-
-  # 2) Deploy revision with GPU + no GPU zonal redundancy + force maxScale=1
+  # Deploy revision with GPU + no GPU zonal redundancy + force maxScale=1
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -41,8 +25,8 @@ steps:
       - "${_DEPLOY_REGION}"
       - "--platform"
       - "managed"
-      - "--startup-probe=tcpSocket.port=8080,initialDelaySeconds=1200,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
-      
+      - "--startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=1200,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
+
       # ---- GPU ----
       - "--gpu=1"
       - "--gpu-type=nvidia-l4"
@@ -51,8 +35,12 @@ steps:
       # ---- Resources ----
       - "--cpu=8"
       - "--memory=32Gi"
+      - "--ephemeral-storage=20Gi"
       - "--no-cpu-throttling"
       - "--concurrency=1"
+
+      # ---- Secrets ----
+      - "--set-secrets=HUGGINGFACE_HUB_TOKEN=${_HF_TOKEN_SECRET}:${_HF_TOKEN_SECRET_VERSION}"
 
       # ---- Scaling (force) ----
       - "--max-instances=1"

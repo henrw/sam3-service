@@ -25,14 +25,16 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
     && python3.12 -m pip install --upgrade pip setuptools wheel
 
 ARG TORCH_VERSION=2.7.0
+ARG TORCHVISION_VERSION=0.22.0
+ARG TORCHAUDIO_VERSION=2.7.0
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126
 RUN python3.12 -m pip install \
     torch==${TORCH_VERSION} \
-    torchvision \
-    torchaudio \
+    torchvision==${TORCHVISION_VERSION} \
+    torchaudio==${TORCHAUDIO_VERSION} \
     --index-url ${TORCH_INDEX_URL}
 
-ARG SAM3_REF=main
+ARG SAM3_REF=11dec2936de97f2857c1f76b66d982d5a001155d
 RUN python3.12 -m pip install "sam3 @ git+https://github.com/facebookresearch/sam3.git@${SAM3_REF}"
 
 # Runtime deps (include missing einops)

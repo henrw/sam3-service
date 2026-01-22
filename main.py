@@ -103,7 +103,7 @@ def _run_segmentation(img_bytes: bytes, prompt: str) -> dict:
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return healthz()
 
 @app.post("/segment/text")
 async def segment_text(image: UploadFile = File(...), prompt: str = Form(...)):

@@ -30,6 +30,9 @@ Pin a SAM3 commit or tag:
 docker build -t sam3-service --build-arg SAM3_REF=<commit-or-tag> .
 ```
 
+The Dockerfile defaults to a pinned commit for reproducible builds; override it
+with `SAM3_REF` as needed.
+
 ## Run locally
 
 ```bash
@@ -50,6 +53,11 @@ curl -X POST http://localhost:8080/segment/text \
 - Set `HUGGINGFACE_HUB_TOKEN` (or `HF_TOKEN`) as a secret/env var.
 - Set `SAM3_DEVICE=cuda` when deploying with a GPU; use `cpu` otherwise.
 - Expect large memory requirements due to the model size.
+- The Cloud Build deploy uses a Secret Manager secret (default `hf-token`) via
+  `_HF_TOKEN_SECRET`/`_HF_TOKEN_SECRET_VERSION` substitutions in
+  `cloudbuild.yaml`.
+- The Cloud Build deploy requests `--ephemeral-storage=20Gi` for model
+  downloads; adjust if your checkpoints need more or less space.
 
 ## Configuration
 
