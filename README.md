@@ -56,8 +56,9 @@ curl -X POST http://localhost:8080/segment/text \
 - The Cloud Build deploy uses a Secret Manager secret (default `hf-token`) via
   `_HF_TOKEN_SECRET`/`_HF_TOKEN_SECRET_VERSION` substitutions in
   `cloudbuild.yaml`.
-- The Cloud Build deploy requests `--ephemeral-storage=20Gi` for model
-  downloads; adjust if your checkpoints need more or less space.
+- The Cloud Build deploy uses stable `gcloud run deploy`. If you need larger
+  ephemeral storage for model downloads, upgrade your Cloud SDK until it
+  supports `--ephemeral-storage`, or bake the model weights into the image.
 
 ## Configuration
 

@@ -35,7 +35,6 @@ steps:
       # ---- Resources ----
       - "--cpu=8"
       - "--memory=32Gi"
-      - "--ephemeral-storage=20Gi"
       - "--no-cpu-throttling"
       - "--concurrency=1"
 
