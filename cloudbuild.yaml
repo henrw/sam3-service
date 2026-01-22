@@ -41,8 +41,8 @@ steps:
       - "${_DEPLOY_REGION}"
       - "--platform"
       - "managed"
-      - "--quiet"
-
+      - "--startup-probe=tcpSocket.port=8080,initialDelaySeconds=1200,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
+      
       # ---- GPU ----
       - "--gpu=1"
       - "--gpu-type=nvidia-l4"
@@ -63,7 +63,7 @@ steps:
       # ---- Access ----
       - "--allow-unauthenticated"
 
-timeout: 1200s
+timeout: 1800s
 
 images:
   - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
