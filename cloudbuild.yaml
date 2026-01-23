@@ -25,7 +25,7 @@ steps:
       - "${_DEPLOY_REGION}"
       - "--platform"
       - "managed"
-      - "--startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=1200,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
+      - "--startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=240,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
 
       # ---- GPU ----
       - "--gpu=1"
