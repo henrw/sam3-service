@@ -25,7 +25,7 @@ steps:
       - "${_DEPLOY_REGION}"
       - "--platform"
       - "managed"
-      - "--startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=240,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
+      - "--startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=10,failureThreshold=24,timeoutSeconds=10"
 
       # ---- GPU ----
       - "--gpu=1"
@@ -39,7 +39,7 @@ steps:
       - "--concurrency=1"
 
       # ---- Secrets ----
-      - "--set-secrets=HUGGINGFACE_HUB_TOKEN=${_HF_TOKEN_SECRET}:${_HF_TOKEN_SECRET_VERSION}"
+      - "--set-env-vars=HUGGINGFACE_HUB_TOKEN=${_HF_TOKEN_SECRET}:${_HF_TOKEN_SECRET_VERSION}"
 
       # ---- Scaling (force) ----
       - "--max-instances=1"
