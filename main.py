@@ -11,24 +11,7 @@ from PIL import Image, UnidentifiedImageError
 
 from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
-import threading
 
-def _load_model_background():
-    global processor, model_device, startup_error
-    _configure_hf_token()
-    _set_torch_threads()
-    model_device = _resolve_device()
-    logger.info("Loading SAM3 model on %s...", model_device)
-    try:
-        from sam3.model_builder import build_sam3_image_model  # lazy import
-        model = build_sam3_image_model(device=model_device)
-        processor = Sam3Processor(model, device=model_device)
-        logger.info("SAM3 model ready.")
-    except Exception as exc:
-        startup_error = str(exc)
-        processor = None
-        logger.exception("Failed to load SAM3 model.")
-        
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger("sam3-service")
@@ -71,18 +54,27 @@ def _resolve_device() -> str:
 
 
 @app.on_event("startup")
-def startup():
-    # Return immediately so health check can pass
-    t = threading.Thread(target=_load_model_background, daemon=True)
-    t.start()
+def load_model() -> None:
+    global processor, model_device, startup_error
+    _configure_hf_token()
+    _set_torch_threads()
+    model_device = _resolve_device()
+    logger.info("Loading SAM3 model on %s...", model_device)
+    try:
+        model = build_sam3_image_model(device=model_device)
+        processor = Sam3Processor(model, device=model_device)
+        logger.info("SAM3 model ready.")
+    except Exception as exc:
+        startup_error = str(exc)
+        processor = None
+        logger.exception("Failed to load SAM3 model.")
+
 
 @app.get("/healthz")
 def healthz():
-    # Must be 2xx/3xx for Cloud Run probes
     if processor is None:
         return JSONResponse(
-            status_code=200,
-            content={"status": "loading", "error": startup_error},
+            status_code=503, content={"status": "loading", "error": startup_error}
         )
     return {"status": "ok", "device": model_device}
 
