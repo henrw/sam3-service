@@ -46,6 +46,7 @@ RUN python3.12 -m pip install \
     einops \
     decord \
     pycocotools \
+    psutil \
  && python3.12 -c "import einops; print('einops OK', einops.__version__)"
 
 RUN useradd -m -u 10001 appuser \
