@@ -39,7 +39,7 @@ steps:
       - "--concurrency=1"
 
       # ---- Secrets ----
-      - "--set-secrets=HUGGINGFACE_HUB_TOKEN=${_HF_TOKEN_SECRET}:${_HF_TOKEN_SECRET_VERSION}"
+      # - "--set-secrets=HUGGINGFACE_HUB_TOKEN=${_HF_TOKEN_SECRET}:${_HF_TOKEN_SECRET_VERSION}"
 
       # ---- Scaling (force) ----
       - "--max-instances=1"
