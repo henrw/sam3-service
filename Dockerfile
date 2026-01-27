@@ -47,6 +47,7 @@ RUN python3.12 -m pip install \
     decord \
     pycocotools \
     psutil \
+    huggingface_hub \
  && python3.12 -c "import einops; print('einops OK', einops.__version__)"
 
 RUN useradd -m -u 10001 appuser \

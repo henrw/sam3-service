@@ -10,6 +10,11 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 
+from huggingface_hub import HfFolder
+
+_configure_hf_token()
+HfFolder.save_token(os.environ["HUGGINGFACE_HUB_TOKEN"])
+
 # NOTE: DO NOT import sam3 at module import time; it can pull in training deps and crash uvicorn import.
 # We import sam3 lazily inside the background loader.
 
@@ -25,9 +30,14 @@ startup_error: Optional[str] = None
 
 
 def _configure_hf_token() -> None:
-    hf_token = os.getenv("HF_TOKEN")
-    if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
-        os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+    token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+    logger.info(
+        "HUGGINGFACE_HUB_TOKEN present=%s len=%s",
+        bool(token),
+        len(token) if token else 0,
+    )
+    if not token:
+        raise RuntimeError("HUGGINGFACE_HUB_TOKEN is not set")
 
 
 def _set_torch_threads() -> None:
@@ -55,35 +65,19 @@ def _resolve_device() -> str:
 
 
 def _load_model_background() -> None:
-    """Loads the SAM3 model without blocking the web server from starting."""
     global processor, model_device, startup_error
 
-    _configure_hf_token()
-    _set_torch_threads()
-    model_device = _resolve_device()
-
-    # Useful boot diagnostics
     try:
-        logger.info(
-            "Torch: version=%s cuda.is_available=%s torch.version.cuda=%s",
-            torch.__version__,
-            torch.cuda.is_available(),
-            getattr(torch.version, "cuda", None),
-        )
-        if torch.cuda.is_available():
-            logger.info(
-                "CUDA device: count=%s name=%s capability=%s",
-                torch.cuda.device_count(),
-                torch.cuda.get_device_name(0),
-                torch.cuda.get_device_capability(0),
-            )
-    except Exception:
-        logger.exception("Failed to log torch/cuda diagnostics.")
+        from huggingface_hub import HfFolder
 
-    logger.info("Loading SAM3 model on %s...", model_device)
+        _configure_hf_token()
+        HfFolder.save_token(os.environ["HUGGINGFACE_HUB_TOKEN"])
 
-    try:
-        # Lazy imports to avoid killing uvicorn at import time
+        _set_torch_threads()
+        model_device = _resolve_device()
+
+        logger.info("Loading SAM3 model on %s...", model_device)
+
         from sam3.model_builder import build_sam3_image_model
         from sam3.model.sam3_image_processor import Sam3Processor
 
@@ -91,6 +85,7 @@ def _load_model_background() -> None:
         processor = Sam3Processor(model, device=model_device)
         startup_error = None
         logger.info("SAM3 model ready.")
+
     except Exception as exc:
         startup_error = str(exc)
         processor = None
