@@ -12,40 +12,21 @@ steps:
       - push
       - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
 
-  # Deploy revision with GPU + no GPU zonal redundancy + force maxScale=1
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - "${_SERVICE_NAME}"
-      - "--image"
-      - "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
-      - "--region"
-      - "${_DEPLOY_REGION}"
-      - "--platform"
-      - "managed"
-      - "--startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=240,periodSeconds=10,failureThreshold=1,timeoutSeconds=5"
-
-      # ---- GPU ----
-      - "--gpu=1"
-      - "--gpu-type=nvidia-l4"
-      - "--no-gpu-zonal-redundancy"
-
-      # ---- Resources ----
-      - "--cpu=8"
-      - "--memory=32Gi"
-      - "--no-cpu-throttling"
-      - "--concurrency=1"
-
-      # ---- Scaling (force) ----
-      - "--max-instances=1"
-      - "--min-instances=0"
-      # Force the underlying revision annotation explicitly:
-      # - "--update-annotations=autoscaling.knative.dev/maxScale=1,autoscaling.knative.dev/minScale=0"
-
-      # ---- Access ----
-      - "--allow-unauthenticated"
+      - -c
+      - |
+        set -euo pipefail
+        gcloud run deploy "${_SERVICE_NAME}" \
+          --image "${_AR_HOSTNAME}/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}" \
+          --region "${_DEPLOY_REGION}" \
+          --platform managed \
+          --allow-unauthenticated \
+          --cpu 8 --memory 32Gi --no-cpu-throttling --concurrency 1 \
+          --gpu 1 --gpu-type nvidia-l4 --no-gpu-zonal-redundancy \
+          --max-instances 1 --min-instances 0 \
+          --startup-probe="httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=10,failureThreshold=24,timeoutSeconds=5"
 
 timeout: 1800s
 
