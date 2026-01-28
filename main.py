@@ -4,6 +4,7 @@ import threading
 from io import BytesIO
 from typing import List, Optional
 
+import cv2
 import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -173,7 +174,39 @@ def _encode_masks_rle(masks: torch.Tensor) -> List[dict]:
     return rles
 
 
-def _format_output(state: dict, label: Optional[str] = None, include_masks: bool = False) -> dict:
+def _masks_to_contours(masks: torch.Tensor) -> List[List[List[List[int]]]]:
+    if masks.numel() == 0:
+        return []
+
+    if masks.dim() == 4:
+        masks = masks[:, 0, :, :]
+
+    masks_np = masks.detach().cpu().numpy().astype(np.uint8)
+    contours_per_mask: List[List[List[List[int]]]] = []
+    for mask in masks_np:
+        if mask.max() == 0:
+            contours_per_mask.append([])
+            continue
+        mask_u8 = (mask * 255).astype(np.uint8)
+        found = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = found[0] if len(found) == 2 else found[1]
+        mask_contours: List[List[List[int]]] = []
+        for contour in contours:
+            if contour.size == 0:
+                continue
+            points = contour.reshape(-1, 2).tolist()
+            mask_contours.append([[int(x), int(y)] for x, y in points])
+        contours_per_mask.append(mask_contours)
+
+    return contours_per_mask
+
+
+def _format_output(
+    state: dict,
+    label: Optional[str] = None,
+    include_masks: bool = False,
+    include_contours: bool = False,
+) -> dict:
     masks = state["masks"]
     boxes = state["boxes"]
     scores = state["scores"]
@@ -187,6 +220,8 @@ def _format_output(state: dict, label: Optional[str] = None, include_masks: bool
         result["label"] = label
     if include_masks:
         result["masks_rle"] = _encode_masks_rle(masks)
+    if include_contours:
+        result["contours"] = _masks_to_contours(masks)
     return result
 
 
@@ -202,7 +237,10 @@ def _run_segmentation(img_bytes: bytes, prompt: str) -> dict:
 
 
 def _run_segmentation_batch(
-    img_bytes: bytes, prompts: List[str], include_masks: bool = False
+    img_bytes: bytes,
+    prompts: List[str],
+    include_masks: bool = False,
+    include_contours: bool = False,
 ) -> dict:
     if processor is None:
         raise RuntimeError("Model not loaded")
@@ -214,45 +252,24 @@ def _run_segmentation_batch(
     for prompt in prompts:
         processor.reset_all_prompts(state)
         out = processor.set_text_prompt(state=state, prompt=prompt)
-        results.append(_format_output(out, label=prompt, include_masks=include_masks))
+        results.append(
+            _format_output(
+                out,
+                label=prompt,
+                include_masks=include_masks,
+                include_contours=include_contours,
+            )
+        )
 
     return {"results": results}
 
 
-@app.post("/segment/text")
-async def segment_text(image: UploadFile = File(...), prompt: str = Form(...)):
-    if processor is None:
-        detail = "Model is not ready."
-        if startup_error:
-            detail = f"Model failed to load: {startup_error}"
-        raise HTTPException(status_code=503, detail=detail)
-
-    if not prompt.strip():
-        raise HTTPException(status_code=400, detail="Prompt must not be empty.")
-
-    img_bytes = await image.read()
-    try:
-        if not img_bytes:
-            raise HTTPException(status_code=400, detail="Image is empty.")
-        result = await run_in_threadpool(_run_segmentation, img_bytes, prompt)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("Segmentation failed.")
-        raise HTTPException(status_code=500, detail="Segmentation failed.")
-    finally:
-        await image.close()
-
-    return result
-
-
-@app.post("/segment/text/batch")
+@app.post("/segment")
 async def segment_text_batch(
     image: UploadFile = File(...),
     prompts: List[str] = Form(...),
     return_masks: bool = Form(False),
+    return_contours: bool = Form(False),
 ):
     if processor is None:
         detail = "Model is not ready."
@@ -269,7 +286,11 @@ async def segment_text_batch(
     img_bytes = await image.read()
     try:
         result = await run_in_threadpool(
-            _run_segmentation_batch, img_bytes, cleaned, return_masks
+            _run_segmentation_batch,
+            img_bytes,
+            cleaned,
+            return_masks,
+            return_contours,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

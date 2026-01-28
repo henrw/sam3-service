@@ -44,6 +44,7 @@ RUN python3.12 -m pip install \
     pillow \
     python-multipart \
     einops \
+    opencv-python-headless \
     decord \
     pycocotools \
     psutil \

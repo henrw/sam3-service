@@ -42,26 +42,29 @@ docker run --rm -p 8080:8080 \
   sam3-service
 ```
 
-```bash
-curl -X POST http://localhost:8080/segment/text \
-  -F "image=@/path/to/image.jpg" \
-  -F "prompt=a dog"
-```
-
 Batch text prompts (repeat the `prompts` field):
 
 ```bash
-curl -X POST http://localhost:8080/segment/text/batch \
+curl -X POST http://localhost:8080/segment \
   -F "image=@/path/to/image.jpg" \
   -F "prompts=cat" \
   -F "prompts=dog"
 ```
 
+Include mask contours (polygon points):
+
+```bash
+curl -X POST http://localhost:8080/segment \
+  -F "image=@/path/to/image.jpg" \
+  -F "prompts=cat" \
+  -F "return_contours=true"
+```
+
 ## Cloud Run example
 
 ```bash
-curl -X POST "https://sam3-service-781746316139.us-central1.run.app/segment/text" \
-  -F "prompt=mug cup" \
+curl -X POST "https://sam3-service-781746316139.us-central1.run.app/segment" \
+  -F "prompts=mug cup" \
   -F "image=@\"/Users/henrywu/Desktop/gentutorial_media/ICON/Mug Cake/setup.jpg\""
 ```
 
