@@ -10,11 +10,6 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 
-from huggingface_hub import HfFolder
-
-_configure_hf_token()
-HfFolder.save_token(os.environ["HUGGINGFACE_HUB_TOKEN"])
-
 # NOTE: DO NOT import sam3 at module import time; it can pull in training deps and crash uvicorn import.
 # We import sam3 lazily inside the background loader.
 
@@ -29,7 +24,7 @@ model_device: Optional[str] = None
 startup_error: Optional[str] = None
 
 
-def _configure_hf_token() -> None:
+def _get_hf_token() -> str:
     token = os.getenv("HUGGINGFACE_HUB_TOKEN")
     logger.info(
         "HUGGINGFACE_HUB_TOKEN present=%s len=%s",
@@ -38,15 +33,22 @@ def _configure_hf_token() -> None:
     )
     if not token:
         raise RuntimeError("HUGGINGFACE_HUB_TOKEN is not set")
+    return token
 
 
 def _set_torch_threads() -> None:
+    # Optional: keep startup responsive on CPU by limiting threads
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+
     threads = os.getenv("TORCH_NUM_THREADS")
     if threads:
         try:
             torch.set_num_threads(int(threads))
         except ValueError:
             logger.warning("Invalid TORCH_NUM_THREADS=%s, ignoring.", threads)
+    else:
+        torch.set_num_threads(1)
 
 
 def _resolve_device() -> str:
@@ -65,24 +67,46 @@ def _resolve_device() -> str:
 
 
 def _load_model_background() -> None:
+    """Loads the SAM3 model without blocking the web server from starting."""
     global processor, model_device, startup_error
 
     try:
-        from huggingface_hub import HfFolder
+        # Ensure HF auth is registered for gated downloads
+        token = _get_hf_token()
+        from huggingface_hub import login  # lazy import
 
-        _configure_hf_token()
-        HfFolder.save_token(os.environ["HUGGINGFACE_HUB_TOKEN"])
+        login(token=token, add_to_git_credential=False)
 
         _set_torch_threads()
         model_device = _resolve_device()
 
+        # Useful boot diagnostics
+        try:
+            logger.info(
+                "Torch: version=%s cuda.is_available=%s torch.version.cuda=%s",
+                torch.__version__,
+                torch.cuda.is_available(),
+                getattr(torch.version, "cuda", None),
+            )
+            if torch.cuda.is_available():
+                logger.info(
+                    "CUDA device: count=%s name=%s capability=%s",
+                    torch.cuda.device_count(),
+                    torch.cuda.get_device_name(0),
+                    torch.cuda.get_device_capability(0),
+                )
+        except Exception:
+            logger.exception("Failed to log torch/cuda diagnostics.")
+
         logger.info("Loading SAM3 model on %s...", model_device)
 
+        # Lazy imports to avoid killing uvicorn at import time
         from sam3.model_builder import build_sam3_image_model
         from sam3.model.sam3_image_processor import Sam3Processor
 
         model = build_sam3_image_model(device=model_device)
         processor = Sam3Processor(model, device=model_device)
+
         startup_error = None
         logger.info("SAM3 model ready.")
 
@@ -94,7 +118,6 @@ def _load_model_background() -> None:
 
 @app.on_event("startup")
 def startup() -> None:
-    # Start loading in background; do not block server startup
     t = threading.Thread(target=_load_model_background, daemon=True)
     t.start()
 
@@ -103,7 +126,7 @@ def startup() -> None:
 def healthz():
     """
     Cloud Run startup probes require a 2xx/3xx response to pass.
-    We return 200 even while loading, but include status info.
+    Return 200 even while loading, but include status info.
     """
     if processor is None:
         return JSONResponse(status_code=200, content={"status": "loading", "error": startup_error})
@@ -140,7 +163,6 @@ def _run_segmentation(img_bytes: bytes, prompt: str) -> dict:
 
 @app.post("/segment/text")
 async def segment_text(image: UploadFile = File(...), prompt: str = Form(...)):
-    # Client-facing endpoint should reflect readiness accurately
     if processor is None:
         detail = "Model is not ready."
         if startup_error:
