@@ -2,13 +2,15 @@ import logging
 import os
 import threading
 from io import BytesIO
-from typing import Optional
+from typing import List, Optional
 
+import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
+from pycocotools import mask as mask_utils
 
 # NOTE: DO NOT import sam3 at module import time; it can pull in training deps and crash uvicorn import.
 # We import sam3 lazily inside the background loader.
@@ -122,7 +124,7 @@ def startup() -> None:
     t.start()
 
 
-@app.get("/healthz")
+# @app.get("/healthz")
 def healthz():
     """
     Cloud Run startup probes require a 2xx/3xx response to pass.
@@ -138,27 +140,83 @@ def health():
     return healthz()
 
 
-def _run_segmentation(img_bytes: bytes, prompt: str) -> dict:
-    if processor is None:
-        raise RuntimeError("Model not loaded")
-
+def _load_image(img_bytes: bytes) -> Image.Image:
+    if not img_bytes:
+        raise ValueError("Image is empty.")
     try:
-        pil = Image.open(BytesIO(img_bytes)).convert("RGB")
+        return Image.open(BytesIO(img_bytes)).convert("RGB")
     except UnidentifiedImageError as exc:
         raise ValueError("Invalid image file.") from exc
 
-    state = processor.set_image(pil)
-    out = processor.set_text_prompt(state=state, prompt=prompt)
 
-    masks = out["masks"]
-    boxes = out["boxes"]
-    scores = out["scores"]
+def _encode_masks_rle(masks: torch.Tensor) -> List[dict]:
+    if masks.numel() == 0:
+        return []
 
-    return {
+    if masks.dim() == 4:
+        masks = masks[:, 0, :, :]
+
+    masks_np = masks.detach().cpu().numpy().astype(np.uint8)
+    if masks_np.ndim == 2:
+        masks_np = masks_np[:, :, None]
+    else:
+        masks_np = np.transpose(masks_np, (1, 2, 0))
+
+    rles = mask_utils.encode(np.asfortranarray(masks_np))
+    if isinstance(rles, dict):
+        rles = [rles]
+
+    for rle in rles:
+        counts = rle.get("counts")
+        if isinstance(counts, bytes):
+            rle["counts"] = counts.decode("ascii")
+    return rles
+
+
+def _format_output(state: dict, label: Optional[str] = None, include_masks: bool = False) -> dict:
+    masks = state["masks"]
+    boxes = state["boxes"]
+    scores = state["scores"]
+
+    result = {
         "boxes": boxes.detach().cpu().tolist(),
         "scores": scores.detach().cpu().tolist(),
         "mask_shape": list(masks.shape),
     }
+    if label is not None:
+        result["label"] = label
+    if include_masks:
+        result["masks_rle"] = _encode_masks_rle(masks)
+    return result
+
+
+def _run_segmentation(img_bytes: bytes, prompt: str) -> dict:
+    if processor is None:
+        raise RuntimeError("Model not loaded")
+
+    pil = _load_image(img_bytes)
+    state = processor.set_image(pil)
+    out = processor.set_text_prompt(state=state, prompt=prompt)
+
+    return _format_output(out)
+
+
+def _run_segmentation_batch(
+    img_bytes: bytes, prompts: List[str], include_masks: bool = False
+) -> dict:
+    if processor is None:
+        raise RuntimeError("Model not loaded")
+
+    pil = _load_image(img_bytes)
+    state = processor.set_image(pil)
+
+    results = []
+    for prompt in prompts:
+        processor.reset_all_prompts(state)
+        out = processor.set_text_prompt(state=state, prompt=prompt)
+        results.append(_format_output(out, label=prompt, include_masks=include_masks))
+
+    return {"results": results}
 
 
 @app.post("/segment/text")
@@ -184,6 +242,42 @@ async def segment_text(image: UploadFile = File(...), prompt: str = Form(...)):
     except Exception:
         logger.exception("Segmentation failed.")
         raise HTTPException(status_code=500, detail="Segmentation failed.")
+    finally:
+        await image.close()
+
+    return result
+
+
+@app.post("/segment/text/batch")
+async def segment_text_batch(
+    image: UploadFile = File(...),
+    prompts: List[str] = Form(...),
+    return_masks: bool = Form(False),
+):
+    if processor is None:
+        detail = "Model is not ready."
+        if startup_error:
+            detail = f"Model failed to load: {startup_error}"
+        raise HTTPException(status_code=503, detail=detail)
+
+    cleaned = [prompt.strip() for prompt in prompts if prompt and prompt.strip()]
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Prompts must not be empty.")
+    if len(cleaned) != len(prompts):
+        raise HTTPException(status_code=400, detail="Prompts must not be empty.")
+
+    img_bytes = await image.read()
+    try:
+        result = await run_in_threadpool(
+            _run_segmentation_batch, img_bytes, cleaned, return_masks
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Batch segmentation failed.")
+        raise HTTPException(status_code=500, detail="Batch segmentation failed.")
     finally:
         await image.close()
 

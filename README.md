@@ -48,6 +48,27 @@ curl -X POST http://localhost:8080/segment/text \
   -F "prompt=a dog"
 ```
 
+Batch text prompts (repeat the `prompts` field):
+
+```bash
+curl -X POST http://localhost:8080/segment/text/batch \
+  -F "image=@/path/to/image.jpg" \
+  -F "prompts=cat" \
+  -F "prompts=dog"
+```
+
+## Cloud Run example
+
+```bash
+curl -X POST "https://sam3-service-781746316139.us-central1.run.app/segment/text" \
+  -F "prompt=mug cup" \
+  -F "image=@\"/Users/henrywu/Desktop/gentutorial_media/ICON/Mug Cake/setup.jpg\""
+```
+
+```json
+{"boxes":[[230.8414306640625,324.615234375,350.1302795410156,440.8183288574219]],"scores":[0.7155749797821045],"mask_shape":[1,1,562,1000]}
+```
+
 ## Cloud Run notes
 
 - Set `HUGGINGFACE_HUB_TOKEN` (or `HF_TOKEN`) as a secret/env var.
