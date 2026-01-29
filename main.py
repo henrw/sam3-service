@@ -4,7 +4,6 @@ import threading
 from io import BytesIO
 from typing import List, Optional
 
-import cv2
 import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -125,7 +124,7 @@ def startup() -> None:
     t.start()
 
 
-# @app.get("/healthz")
+@app.get("/healthz")
 def healthz():
     """
     Cloud Run startup probes require a 2xx/3xx response to pass.
@@ -175,6 +174,11 @@ def _encode_masks_rle(masks: torch.Tensor) -> List[dict]:
 
 
 def _masks_to_contours(masks: torch.Tensor) -> List[List[List[List[int]]]]:
+    try:
+        import cv2  # lazy import to avoid startup failures if deps are missing
+    except Exception as exc:
+        raise RuntimeError("OpenCV is required for contour output.") from exc
+
     if masks.numel() == 0:
         return []
 
